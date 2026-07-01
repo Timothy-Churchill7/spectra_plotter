@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spectra Plotter</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% include '_bg_mammoths.html' %}
+  <div class="container">
+    <h1>Spectra Plotter</h1>
+    <p class="subtitle">
+      Upload a UV-Vis, emission, or lifetime data file from your instrument
+      (.csv, .xlsx, or .txt). The measurement type is detected automatically
+      and a normalized plot is generated.
+    </p>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form action="/upload" method="post" enctype="multipart/form-data">
+      <label for="file-input" class="dropzone" id="dropzone">
+        <span id="dropzone-text">Drag &amp; drop a file here, or click to browse</span>
+        <input type="file" id="file-input" name="file" accept=".csv,.xlsx,.xls,.txt" required>
+      </label>
+      <button type="submit" class="btn">Generate Plot</button>
+    </form>
+  </div>
+
+  <script>
+    const dropzone = document.getElementById('dropzone');
+    const input = document.getElementById('file-input');
+    const text = document.getElementById('dropzone-text');
+
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('dragover');
+    });
+    ['dragleave', 'drop'].forEach((evt) => {
+      dropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+      });
+    });
+    dropzone.addEventListener('drop', (e) => {
+      if (e.dataTransfer.files.length) {
+        input.files = e.dataTransfer.files;
+        text.textContent = input.files[0].name;
+      }
+    });
+    input.addEventListener('change', () => {
+      if (input.files.length) text.textContent = input.files[0].name;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spectra Plotter — Result</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% include '_bg_mammoths.html' %}
+  <div class="container">
+    <div class="result-header">
+      <h1>Your Plot</h1>
+      <span class="badge">{{ type_label }}</span>
+    </div>
+    <p class="filename">{{ original_name }}</p>
+
+    <img class="plot" src="{{ image_url }}" alt="Generated spectrum plot">
+
+    <div class="actions">
+      <a class="download" href="{{ image_url }}" download>Download PNG</a>
+      <a class="again" href="/">Upload another file</a>
+    </div>
+  </div>
+</body>
+</html>
