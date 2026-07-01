@@ -40,9 +40,9 @@ plt.rcParams.update({
     "axes.edgecolor": TEXT_COLOR,
     "axes.labelcolor": TEXT_COLOR,
     "axes.linewidth": 0.7,
-    "axes.titlesize": 12,
+    "axes.titlesize": 16,
     "axes.titleweight": "normal",
-    "axes.labelsize": 11,
+    "axes.labelsize": 14,
     "axes.labelweight": "normal",
     "xtick.color": TEXT_COLOR,
     "ytick.color": TEXT_COLOR,
@@ -388,9 +388,9 @@ def plot_spectrum(x, y, data_type: str, source_name: str, output_path: Path, fit
             color=TEXT_COLOR, linespacing=1.7,
         )
 
-    ax.set_xlabel(labels["xlabel"], fontsize=11, labelpad=6)
-    ax.set_ylabel(labels["ylabel"], fontsize=11, labelpad=6)
-    ax.set_title(labels["title"], fontsize=12.5, pad=10)
+    ax.set_xlabel(labels["xlabel"], fontsize=14, labelpad=6)
+    ax.set_ylabel(labels["ylabel"], fontsize=14, labelpad=6)
+    ax.set_title(labels["title"], fontsize=16, pad=10)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
