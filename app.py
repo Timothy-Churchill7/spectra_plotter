@@ -4,9 +4,14 @@ Small Flask front-end for spectra_plotter.py.
 
 Run:
     python app.py
-Then open http://127.0.0.1:5000 and upload a .csv, .xlsx, or .txt file.
+Then open http://127.0.0.1:5050 and upload a .csv, .xlsx, or .txt file.
+
+In production (e.g. Render), gunicorn imports the `app` object directly and
+this __main__ block never runs.
 """
 
+import os
+import time
 import uuid
 from pathlib import Path
 
@@ -22,6 +27,14 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls", ".txt"}
+OUTPUT_MAX_AGE_SECONDS = 3600  # hosting disk is ephemeral/shared; don't let old plots pile up
+
+
+def _clean_old_outputs():
+    cutoff = time.time() - OUTPUT_MAX_AGE_SECONDS
+    for f in OUTPUT_DIR.glob("*.png"):
+        if f.stat().st_mtime < cutoff:
+            f.unlink(missing_ok=True)
 
 TYPE_LABELS = {
     "uvvis": "UV-Vis Absorption",
@@ -40,6 +53,8 @@ def index():
 
 @app.route("/upload", methods=["POST"])
 def upload():
+    _clean_old_outputs()
+
     file = request.files.get("file")
     if file is None or file.filename == "":
         return render_template("index.html", error="Please choose a file to upload."), 400
@@ -77,4 +92,6 @@ def upload():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5050)
+    port = int(os.environ.get("PORT", 5050))
+    debug = os.environ.get("FLASK_DEBUG", "1") == "1"
+    app.run(host="0.0.0.0", port=port, debug=debug)
