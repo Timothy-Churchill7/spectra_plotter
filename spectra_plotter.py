@@ -163,7 +163,25 @@ def load_table(path: Path) -> pd.DataFrame:
 # ----------------------------------------------------------------------
 # Instrument-type detection
 # ----------------------------------------------------------------------
-def detect_type(df: pd.DataFrame) -> str:
+def find_baseline_column(df: pd.DataFrame):
+    """Return the index of a column whose header names it as a baseline/blank
+    reference trace (e.g. 'Baseline', 'Baseline (Abs)'), or None."""
+    for i, c in enumerate(df.columns):
+        if i == 0:
+            continue
+        if re.search(r"baseline|\bblank\b", str(c), re.IGNORECASE):
+            return i
+    return None
+
+
+def select_signal_column(df: pd.DataFrame, baseline_idx=None) -> int:
+    """Pick the column index to treat as the primary y signal: the first
+    column after x that isn't the baseline column, if any."""
+    candidates = [i for i in range(1, df.shape[1]) if i != baseline_idx]
+    return candidates[0] if candidates else 1
+
+
+def detect_type(df: pd.DataFrame, y: np.ndarray) -> str:
     """Classify the data as 'uvvis', 'emission', or 'lifetime' using column
     header keywords plus shape-based heuristics on the values themselves."""
     headers = " ".join(str(c).lower() for c in df.columns)
@@ -182,9 +200,6 @@ def detect_type(df: pd.DataFrame) -> str:
     if re.search(r"wavelength|\bnm\b", headers):
         score["uvvis"] += 1
         score["emission"] += 1
-
-    x = df.iloc[:, 0].to_numpy(dtype=float)
-    y = df.iloc[:, 1].to_numpy(dtype=float)
 
     # Absorbance is almost always within roughly [-0.5, 5]
     if np.nanmax(y) <= 5 and np.nanmin(y) >= -0.5:
@@ -358,7 +373,7 @@ LABELS = {
 }
 
 
-def plot_spectrum(x, y, data_type: str, source_name: str, output_path: Path, fit_info: dict = None):
+def plot_spectrum(x, y, data_type: str, source_name: str, output_path: Path, fit_info: dict = None, note: str = None):
     y_norm = normalize(y)
     labels = LABELS[data_type]
 
@@ -388,6 +403,13 @@ def plot_spectrum(x, y, data_type: str, source_name: str, output_path: Path, fit
             color=TEXT_COLOR, linespacing=1.7,
         )
 
+    if note:
+        ax.text(
+            0.97, 0.95, note,
+            transform=ax.transAxes, fontsize=7.5, ha="right", va="top",
+            color="#888888", style="italic",
+        )
+
     ax.set_xlabel(labels["xlabel"], fontsize=14, labelpad=6)
     ax.set_ylabel(labels["ylabel"], fontsize=14, labelpad=6)
     ax.set_title(labels["title"], fontsize=16, pad=10)
@@ -415,12 +437,21 @@ def process_file(input_path: str, output_path: str = None, force_type: str = Non
     if df.shape[1] < 2:
         raise ValueError(f"Expected at least 2 numeric columns, found {df.shape[1]} in {path}")
 
-    data_type = force_type or detect_type(df)
+    baseline_idx = find_baseline_column(df)
+    y_idx = select_signal_column(df, baseline_idx)
 
     x = df.iloc[:, 0].to_numpy(dtype=float)
-    y = df.iloc[:, 1].to_numpy(dtype=float)
+    y = df.iloc[:, y_idx].to_numpy(dtype=float)
     order = np.argsort(x)
     x, y = x[order], y[order]
+
+    data_type = force_type or detect_type(df, y)
+
+    note = None
+    if data_type == "uvvis" and baseline_idx is not None:
+        baseline = df.iloc[:, baseline_idx].to_numpy(dtype=float)[order]
+        y = y - baseline
+        note = "baseline-subtracted"
 
     fit_info = None
     if data_type == "lifetime":
@@ -434,7 +465,7 @@ def process_file(input_path: str, output_path: str = None, force_type: str = Non
         fit_info = fit_lifetime(x, y)
 
     out = Path(output_path) if output_path else path.with_suffix(".png")
-    plot_spectrum(x, y, data_type, path.name, out, fit_info=fit_info)
+    plot_spectrum(x, y, data_type, path.name, out, fit_info=fit_info, note=note)
     return out, data_type
 
 
