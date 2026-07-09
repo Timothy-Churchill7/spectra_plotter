@@ -3,24 +3,59 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Spectra Plotter — Result</title>
+  <title>Plotter — {{ info.label }} result</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-  {% include '_bg_mammoths.html' %}
+  <header class="site">
+    <h1>Plotter</h1>
+    <p>{{ info.label }} plot</p>
+  </header>
+
   <div class="container">
-    <div class="result-header">
-      <h1>Your Plot</h1>
-      <span class="badge">{{ type_label }}</span>
-    </div>
-    <p class="filename">{{ original_name }}</p>
+    <div class="panel">
+      <div class="result-head">
+        <h2>Your plot</h2>
+        <span class="badge">{{ info.label }}</span>
+      </div>
+      <p class="filenames">{{ source_names | join(', ') }}</p>
 
-    <img class="plot" src="{{ image_url }}" alt="Generated spectrum plot">
+      <img class="plot-img" src="{{ image_url }}" alt="Generated {{ info.label }} plot">
 
-    <div class="actions">
-      <a class="download" href="{{ image_url }}" download>Download PNG</a>
-      <a class="again" href="/">Upload another file</a>
+      {% if fit_info %}
+      <div class="fit-box">
+        <h3>{{ fit_info.kind }} fit</h3>
+        <div class="fit-grid">
+          <div class="cell"><div class="k">R²</div><div class="v">{{ '%.4f' % fit_info.r2 }}</div></div>
+          {% for t in fit_info.taus %}
+          <div class="cell">
+            <div class="k">τ{{ loop.index }}{% if fit_info.unit %} ({{ fit_info.unit }}){% endif %}</div>
+            <div class="v">{{ '%.2f' % t }}</div>
+          </div>
+          {% endfor %}
+          <div class="cell"><div class="k">avg τ</div><div class="v">{{ '%.2f' % fit_info.tau_avg }}</div></div>
+        </div>
+        <p style="font-size:0.8rem;color:#64748b;margin-top:10px;">
+          Amplitudes a₁…aₙ and baseline c are printed on the figure and reproduced in the Colab script.
+        </p>
+      </div>
+      {% endif %}
+
+      <div class="actions">
+        <a class="btn btn-success btn-lg" href="{{ image_url }}" download>⬇ Download PNG</a>
+        <a class="btn btn-primary btn-lg" href="{{ script_url }}">🐍 Colab script (.py)</a>
+        <a class="btn btn-outline btn-lg" href="{{ url_for('plot_form', data_type=data_type) }}">↻ Plot more</a>
+      </div>
+
+      <div class="hint">
+        Want different labels or bigger text? Open the <b>Colab script</b> — the top
+        <code>CONFIG</code> block has editable <code>TITLE</code>, axis labels and
+        <code>*_SIZE</code> font settings, plus an <code>INSERT DATA PATH HERE</code> blank.
+        {% if info.multi %}Add more paths to <code>DATA_PATHS</code> to overlay extra traces.{% endif %}
+      </div>
     </div>
+
+    <a class="backlink" href="/">← Back to data types</a>
   </div>
 </body>
 </html>

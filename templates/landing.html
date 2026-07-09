@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plotter — Choose your data</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="site">
+    <h1>Plotter</h1>
+    <p>Turn instrument data into clean, publication-ready figures.</p>
+  </header>
+
+  <div class="container">
+    <p class="subtitle">What kind of data do you have? Pick one to get started.</p>
+
+    <div class="card-grid">
+      <a class="type-card tem" href="/tem">
+        <span class="icon">🔬</span>
+        <span class="name">TEM</span>
+        <span class="desc">Quantum-dot micrographs → size CSV + histogram.</span>
+      </a>
+      <a class="type-card" href="{{ url_for('plot_form', data_type='lifetime') }}">
+        <span class="icon">📉</span>
+        <span class="name">Lifetime</span>
+        <span class="desc">TCSPC decay with bi/tri-exponential fit (R², τ).</span>
+      </a>
+      <a class="type-card" href="{{ url_for('plot_form', data_type='uvvis') }}">
+        <span class="icon">🌈</span>
+        <span class="name">UV-Vis</span>
+        <span class="desc">Absorption spectra, overlay multiple traces.</span>
+      </a>
+      <a class="type-card" href="{{ url_for('plot_form', data_type='emission') }}">
+        <span class="icon">✨</span>
+        <span class="name">Emission</span>
+        <span class="desc">Emission / PL spectra, overlay multiple traces.</span>
+      </a>
+    </div>
+
+    <div class="hint">
+      Every plot comes with a matching <b>Google Colab Python script</b> — an
+      <code>INSERT DATA PATH HERE</code> blank plus editable title, axis-label and
+      font-size settings so you can restyle the figure yourself.
+    </div>
+  </div>
+</body>
+</html>

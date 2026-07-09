@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plotter — {{ info.label }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="site">
+    <h1>Plotter</h1>
+    <p>{{ info.label }} plot</p>
+  </header>
+
+  <div class="container">
+    <a class="backlink" href="/" style="margin-top:0;margin-bottom:16px;">← Back to data types</a>
+
+    <div class="panel">
+      <span class="badge">{{ info.label }}</span>
+      <p class="subtitle" style="margin-top:14px;">{{ info.blurb }}</p>
+
+      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+      <form action="{{ url_for('plot_run', data_type=data_type) }}" method="post" enctype="multipart/form-data">
+        <label class="dropzone" id="dropzone">
+          <span id="dropzone-text">
+            {% if info.multi %}
+              Drag &amp; drop file(s) here, or click to browse
+            {% else %}
+              Drag &amp; drop a file here, or click to browse
+            {% endif %}
+          </span>
+          <span class="files" id="file-list"></span>
+          <input type="file" id="file-input" name="files"
+                 accept=".csv,.xlsx,.xls,.txt"
+                 {% if info.multi %}multiple{% endif %} required>
+        </label>
+        <button type="submit" class="btn btn-primary btn-block btn-lg">Generate Plot</button>
+      </form>
+
+      <div class="hint">
+        Accepts <code>.csv</code>, <code>.txt</code>, or <code>.xlsx</code> exported from your
+        instrument — metadata header rows are skipped automatically.
+        {% if info.multi %}Select several files to overlay them on one plot.{% endif %}
+        {% if data_type == 'lifetime' %}The decay tail is fit automatically and R² + τ values are reported.{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const dz = document.getElementById('dropzone');
+    const input = document.getElementById('file-input');
+    const list = document.getElementById('file-list');
+    function show() {
+      if (!input.files.length) { list.textContent = ''; return; }
+      list.textContent = Array.from(input.files).map(f => f.name).join(', ');
+    }
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+    ['dragleave', 'drop'].forEach(ev =>
+      dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('dragover'); }));
+    dz.addEventListener('drop', e => {
+      if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; show(); }
+    });
+    input.addEventListener('change', show);
+  </script>
+</body>
+</html>

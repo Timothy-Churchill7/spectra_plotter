@@ -1,7 +1,9 @@
+flask
+gunicorn
 pandas
 numpy
 scipy
 matplotlib
 openpyxl
-flask
-gunicorn
+pillow
+scikit-image

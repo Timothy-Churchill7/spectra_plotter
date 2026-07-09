@@ -1,7 +1,7 @@
 venv/
 __pycache__/
 *.pyc
-uploads/*
-!uploads/.gitkeep
-static/outputs/*
-!static/outputs/.gitkeep
+uploads/
+.tem_tmp/
+static/outputs/*.png
+static/outputs/*.py
