@@ -3,24 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Plotter — {{ info.label }} result</title>
+  <title>Plotter — your plot</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
   <header class="site">
     <h1>Plotter</h1>
-    <p>{{ info.label }} plot</p>
+    <p>{% if mode == 'lifetime' %}Lifetime decay{% else %}Spectra{% endif %}</p>
   </header>
 
   <div class="container">
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <!-- ── Plot ─────────────────────────────────────────────── -->
     <div class="panel">
       <div class="result-head">
         <h2>Your plot</h2>
-        <span class="badge">{{ info.label }}</span>
+        <span class="badge">
+          {% if mode == 'lifetime' %}Lifetime
+          {% elif meta and meta.mixed %}Mixed spectra
+          {% else %}{{ traces_view[0].kind }}{% endif %}
+        </span>
       </div>
-      <p class="filenames">{{ source_names | join(', ') }}</p>
 
-      <img class="plot-img" src="{{ image_url }}" alt="Generated {{ info.label }} plot">
+      <img class="plot-img" src="{{ image_url }}" alt="Generated plot">
 
       {% if fit_info %}
       <div class="fit-box">
@@ -35,24 +41,147 @@
           {% endfor %}
           <div class="cell"><div class="k">avg τ</div><div class="v">{{ '%.2f' % fit_info.tau_avg }}</div></div>
         </div>
-        <p style="font-size:0.8rem;color:#64748b;margin-top:10px;">
-          Amplitudes a₁…aₙ and baseline c are printed on the figure and reproduced in the Colab script.
-        </p>
       </div>
       {% endif %}
 
       <div class="actions">
         <a class="btn btn-success btn-lg" href="{{ image_url }}" download>⬇ Download PNG</a>
         <a class="btn btn-primary btn-lg" href="{{ script_url }}">🐍 Colab script (.py)</a>
-        <a class="btn btn-outline btn-lg" href="{{ url_for('plot_form', data_type=data_type) }}">↻ Plot more</a>
+        <a class="btn btn-outline btn-lg" href="/">↩ Start over</a>
+      </div>
+    </div>
+
+    <!-- ── Add more data (emission / UV-Vis only) ───────────── -->
+    {% if mode == 'xy' %}
+    <div class="panel">
+      <h3 class="panel-title">Plot more data on the same graph</h3>
+      <p class="subtitle" style="margin-bottom:16px;">
+        Add another spectrum. Tell me what kind it is — mix emission and
+        absorbance freely and the legend labels each kind.
+      </p>
+      <form action="{{ url_for('spectra_add') }}" method="post" enctype="multipart/form-data" class="add-form">
+        <select name="data_type" class="input">
+          <option value="emission">Emission</option>
+          <option value="uvvis">UV-Vis (Absorbance)</option>
+        </select>
+        <label class="file-pick">
+          <span id="add-text">Choose file(s)…</span>
+          <input type="file" name="files" accept=".csv,.xlsx,.xls,.txt" multiple required
+                 onchange="document.getElementById('add-text').textContent =
+                   this.files.length ? Array.from(this.files).map(f=>f.name).join(', ') : 'Choose file(s)…'">
+        </label>
+        <button type="submit" class="btn btn-primary">＋ Add to plot</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <!-- ── Styling tool ─────────────────────────────────────── -->
+    <div class="panel">
+      <h3 class="panel-title">Customize appearance</h3>
+
+      <!-- Per-trace label + color. Inputs belong to the style form below via
+           the form="styleform" attribute so one Apply saves everything. -->
+      <div class="trace-list">
+        {% for t in traces_view %}
+        <div class="trace-row">
+          <input form="styleform" type="color" name="color_{{ t.index }}" value="{{ t.color }}"
+                 class="color-dot" title="Trace color">
+          <input form="styleform" type="text" name="label_{{ t.index }}" value="{{ t.label }}"
+                 class="input trace-label" placeholder="Sample name">
+          <span class="kind-tag">{{ t.kind }}</span>
+          {% if traces_view|length > 1 or mode == 'xy' %}
+          <form action="{{ url_for('spectra_remove') }}" method="post" class="rm-form">
+            <input type="hidden" name="index" value="{{ t.index }}">
+            <button type="submit" class="rm-btn" title="Remove this trace">✕</button>
+          </form>
+          {% endif %}
+        </div>
+        {% endfor %}
       </div>
 
-      <div class="hint">
-        Want different labels or bigger text? Open the <b>Colab script</b> — the top
-        <code>CONFIG</code> block has editable <code>TITLE</code>, axis labels and
-        <code>*_SIZE</code> font settings, plus an <code>INSERT DATA PATH HERE</code> blank.
-        {% if info.multi %}Add more paths to <code>DATA_PATHS</code> to overlay extra traces.{% endif %}
-      </div>
+      <form id="styleform" action="{{ url_for('spectra_style') }}" method="post" class="style-form">
+        <div class="field-grid">
+          <label class="field">
+            <span>Title</span>
+            <input class="input" type="text" name="title" value="{{ style.title or '' }}"
+                   placeholder="{{ resolved.title }}">
+          </label>
+          <label class="field">
+            <span>X-axis label</span>
+            <input class="input" type="text" name="xlabel" value="{{ style.xlabel or '' }}"
+                   placeholder="{{ resolved.xlabel }}">
+          </label>
+          <label class="field">
+            <span>Y-axis label</span>
+            <input class="input" type="text" name="ylabel" value="{{ style.ylabel or '' }}"
+                   placeholder="{{ resolved.ylabel }}">
+          </label>
+
+          <label class="field">
+            <span>Font</span>
+            <select class="input" name="font_family">
+              {% for f in font_families %}
+              <option value="{{ f }}" {% if f == style.font_family %}selected{% endif %}>{{ f }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="field">
+            <span>Text color</span>
+            <input class="input color-full" type="color" name="text_color" value="{{ style.text_color }}">
+          </label>
+          <label class="field">
+            <span>Line width</span>
+            <input class="input" type="number" step="0.1" min="0.3" max="6" name="line_width" value="{{ style.line_width }}">
+          </label>
+
+          <label class="field"><span>Title size</span>
+            <input class="input" type="number" min="6" max="48" name="title_size" value="{{ style.title_size }}"></label>
+          <label class="field"><span>Axis-label size</span>
+            <input class="input" type="number" min="6" max="40" name="label_size" value="{{ style.label_size }}"></label>
+          <label class="field"><span>Tick size</span>
+            <input class="input" type="number" min="4" max="32" name="tick_size" value="{{ style.tick_size }}"></label>
+          <label class="field"><span>Legend size</span>
+            <input class="input" type="number" min="4" max="32" name="legend_size" value="{{ style.legend_size }}"></label>
+          {% if mode == 'lifetime' %}
+          <label class="field"><span>Fit-text size</span>
+            <input class="input" type="number" min="4" max="24" name="annot_size" value="{{ style.annot_size }}"></label>
+          {% endif %}
+
+          <label class="field"><span>Figure width (in)</span>
+            <input class="input" type="number" step="0.5" min="3" max="14" name="fig_w" value="{{ style.fig_w }}"></label>
+          <label class="field"><span>Figure height (in)</span>
+            <input class="input" type="number" step="0.5" min="2" max="12" name="fig_h" value="{{ style.fig_h }}"></label>
+
+          <label class="field">
+            <span>Legend position</span>
+            <select class="input" name="legend_loc">
+              {% for loc in legend_locs %}
+              <option value="{{ loc }}" {% if loc == style.legend_loc %}selected{% endif %}>{{ loc }}</option>
+              {% endfor %}
+            </select>
+          </label>
+
+          {% if mode == 'xy' %}
+          <label class="field"><span>UV-Vis min (nm)</span>
+            <input class="input" type="number" step="1" name="uvvis_min" value="{{ style.uvvis_min }}"></label>
+          <label class="field"><span>UV-Vis max (nm)</span>
+            <input class="input" type="number" step="1" name="uvvis_max" value="{{ style.uvvis_max }}"></label>
+          {% endif %}
+        </div>
+
+        <div class="check-row">
+          <label class="chk"><input type="checkbox" name="show_legend" {% if style.show_legend %}checked{% endif %}> Show legend</label>
+          <label class="chk"><input type="checkbox" name="show_grid" {% if style.show_grid %}checked{% endif %}> Show grid</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg">Apply changes</button>
+      </form>
+
+      <p class="hint" style="margin-top:16px;">
+        These same settings are baked into the downloadable <b>Colab script</b>'s
+        <code>CONFIG</code> block, so your styling travels with the code.
+        {% if mode == 'xy' %}UV-Vis traces are normalized within the min/max window above (default 300–700 nm).{% endif %}
+      </p>
     </div>
 
     <a class="backlink" href="/">← Back to data types</a>

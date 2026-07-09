@@ -6,7 +6,8 @@ Generates self-contained, Google-Colab-ready Python scripts that reproduce each
 plot the web app makes. Every script:
 
   * has an obvious `INSERT DATA PATH HERE` blank at the top,
-  * exposes editable CONFIG constants for every label, title and font size,
+  * exposes editable CONFIG constants for every title, label, font, size and
+    color (mirroring the in-app styling tool),
   * needs only the libraries Colab already ships with (pandas, numpy, scipy,
     matplotlib) plus openpyxl for .xlsx.
 
@@ -92,53 +93,62 @@ def normalize(y):
 '''
 
 
-def _subst(template, **kw):
-    out = template
-    for k, v in kw.items():
-        out = out.replace("__%s__" % k, str(v))
-    return out
+# ----------------------------------------------------------------------
+# Shared style CONFIG block (mirrors the in-app styling tool)
+# ----------------------------------------------------------------------
+def _style_config(style, extra=""):
+    return (
+        "# ----- Titles / labels (None = auto) -----\n"
+        f"TITLE   = {style.get('title')!r}\n"
+        f"X_LABEL = {style.get('xlabel')!r}\n"
+        f"Y_LABEL = {style.get('ylabel')!r}\n\n"
+        "# ----- Text, size & color (edit freely) -----\n"
+        f"FONT_FAMILY = {style['font_family']!r}\n"
+        f"TITLE_SIZE  = {style['title_size']}\n"
+        f"LABEL_SIZE  = {style['label_size']}\n"
+        f"TICK_SIZE   = {style['tick_size']}\n"
+        f"LEGEND_SIZE = {style['legend_size']}\n"
+        f"ANNOT_SIZE  = {style['annot_size']}\n"
+        f"TEXT_COLOR  = {style['text_color']!r}\n"
+        f"LINE_WIDTH  = {style['line_width']}\n"
+        f"FIG_W, FIG_H = {style['fig_w']}, {style['fig_h']}\n"
+        f"SHOW_GRID   = {bool(style['show_grid'])}\n"
+        f"SHOW_LEGEND = {bool(style['show_legend'])}\n"
+        f"LEGEND_LOC  = {style['legend_loc']!r}\n"
+        + extra
+    )
 
 
 # ----------------------------------------------------------------------
-# UV-Vis / Emission (xy, one or more overlaid traces, peak-normalized)
+# UV-Vis / Emission (xy, one or more overlaid & possibly mixed traces)
 # ----------------------------------------------------------------------
-_XY_TEMPLATE = '''#!/usr/bin/env python3
+_XY_HEADER = '''#!/usr/bin/env python3
 """
-__TITLE__ — reproducible plot for Google Colab.
+Normalized spectra plot — reproducible figure for Google Colab.
 
 HOW TO USE
 ----------
 1. Upload your data file(s) to Colab (folder icon on the left, or drag-drop).
-2. Put the path(s) in DATA_PATHS below, replacing INSERT DATA PATH HERE.
-   Add more paths to overlay several spectra on the same axes.
-3. Run the cell. Edit anything in the CONFIG block to restyle the figure.
+2. Fill in each "INSERT DATA PATH HERE" in SPECTRA below with the file path.
+   Each entry already carries its data "type" and legend "label" — add or
+   remove entries to change what is overlaid. Mixing "uvvis" and "emission"
+   is fine; the legend is annotated with the kind automatically.
+3. Run the cell. Edit the CONFIG constants to restyle titles, labels, fonts,
+   sizes and colors.
 
-Accepts .csv, .txt or .xlsx exported from the instrument. The first column is
-X (wavelength), the second is the signal. Each trace is normalized so its peak
-= 1.0.
+UV-Vis ("uvvis") traces are cropped to the UVVIS_MIN..UVVIS_MAX window and
+normalized within it; emission traces are normalized over their full range.
 """
 
 # ============================ CONFIG =================================
-DATA_PATHS = [
-    "INSERT DATA PATH HERE",
-    # "second_sample.csv",   # <- uncomment / add more to overlay
-]
+'''
 
-# Optional: give each trace a legend name. Leave empty to use file names.
-TRACE_LABELS = []            # e.g. ["Sample A", "Sample B"]
+_XY_BODY = '''
+# ----- UV-Vis normalization window (nm) -----
+UVVIS_MIN = __UVMIN__
+UVVIS_MAX = __UVMAX__
 
-TITLE   = "__TITLE__"
-X_LABEL = "__XLABEL__"
-Y_LABEL = "__YLABEL__"
-
-TITLE_SIZE  = 16            # change text sizes freely
-LABEL_SIZE  = 14
-TICK_SIZE   = 11
-LEGEND_SIZE = 10
-
-LINE_WIDTH  = 1.4
-FIG_W, FIG_H = 6.0, 4.3
-SAVE_AS = "plot.png"        # set to None to skip saving
+SAVE_AS = "plot.png"     # set to None to skip saving
 # =====================================================================
 
 __LOADER__
@@ -147,27 +157,52 @@ import matplotlib.pyplot as plt
 
 COLORS = ["#2E86C1", "#E67E22", "#27AE60", "#8E44AD",
           "#C0392B", "#16A085", "#D4AC0D", "#5D6D7E"]
+KIND = {"uvvis": "Absorbance", "emission": "Emission"}
+AUTO_TITLE = {"uvvis": "UV-Vis Absorption Spectrum", "emission": "Emission Spectrum"}
+AUTO_YLABEL = {"uvvis": "Normalized Absorbance",
+               "emission": "Normalized Emission Intensity (a.u.)"}
+
+types = [s["type"] for s in SPECTRA]
+unique = list(dict.fromkeys(types))
+mixed = len(unique) > 1
 
 fig, ax = plt.subplots(figsize=(FIG_W, FIG_H), dpi=150)
-
-for i, path in enumerate(DATA_PATHS):
-    df = load_table(path)
+for i, s in enumerate(SPECTRA):
+    df = load_table(s["path"])
     x = df.iloc[:, 0].to_numpy(float)
     y = df.iloc[:, 1].to_numpy(float)
     order = np.argsort(x)
-    x, y = x[order], normalize(y[order])
-    label = TRACE_LABELS[i] if i < len(TRACE_LABELS) else Path(path).stem
-    ax.plot(x, y, color=COLORS[i % len(COLORS)], linewidth=LINE_WIDTH,
-            solid_capstyle="round", label=label)
+    x, y = x[order], y[order]
+    if s["type"] == "uvvis":
+        m = (x >= UVVIS_MIN) & (x <= UVVIS_MAX)
+        if m.sum() >= 2:
+            x, y = x[m], y[m]
+    y = normalize(y)
+    color = s.get("color") or COLORS[i % len(COLORS)]
+    label = s["label"] + ((" (%s)" % KIND[s["type"]]) if mixed else "")
+    ax.plot(x, y, color=color, linewidth=LINE_WIDTH, solid_capstyle="round", label=label)
 
-ax.set_title(TITLE, fontsize=TITLE_SIZE, pad=10)
-ax.set_xlabel(X_LABEL, fontsize=LABEL_SIZE, labelpad=6)
-ax.set_ylabel(Y_LABEL, fontsize=LABEL_SIZE, labelpad=6)
-ax.tick_params(labelsize=TICK_SIZE)
-if len(DATA_PATHS) > 1 or TRACE_LABELS:
-    ax.legend(fontsize=LEGEND_SIZE, frameon=False)
+title = TITLE or ("Normalized Spectra" if mixed else AUTO_TITLE[unique[0]])
+xlabel = X_LABEL or "Wavelength (nm)"
+ylabel = Y_LABEL or ("Normalized Signal (a.u.)" if mixed else AUTO_YLABEL[unique[0]])
+
+ax.set_title(title, fontsize=TITLE_SIZE, fontfamily=FONT_FAMILY, color=TEXT_COLOR, pad=10)
+ax.set_xlabel(xlabel, fontsize=LABEL_SIZE, fontfamily=FONT_FAMILY, color=TEXT_COLOR, labelpad=6)
+ax.set_ylabel(ylabel, fontsize=LABEL_SIZE, fontfamily=FONT_FAMILY, color=TEXT_COLOR, labelpad=6)
+ax.tick_params(labelsize=TICK_SIZE, colors=TEXT_COLOR)
+for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+    lbl.set_fontfamily(FONT_FAMILY)
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
+for sp in ("left", "bottom"):
+    ax.spines[sp].set_color(TEXT_COLOR)
+if SHOW_GRID:
+    ax.grid(True, alpha=0.3, linewidth=0.5)
+if SHOW_LEGEND and ax.get_legend_handles_labels()[0]:
+    leg = ax.legend(loc=LEGEND_LOC, fontsize=LEGEND_SIZE, frameon=False)
+    for t in leg.get_texts():
+        t.set_fontfamily(FONT_FAMILY)
+        t.set_color(TEXT_COLOR)
 ax.margins(x=0.02)
 fig.tight_layout()
 if SAVE_AS:
@@ -177,48 +212,38 @@ plt.show()
 
 
 # ----------------------------------------------------------------------
-# Lifetime (decay + bi/tri-exponential fit with R^2)
+# Lifetime (single decay + bi/tri-exponential fit, R^2)
 # ----------------------------------------------------------------------
-_LIFETIME_TEMPLATE = '''#!/usr/bin/env python3
+_LIFETIME_HEADER = '''#!/usr/bin/env python3
 """
-__TITLE__ — reproducible lifetime-decay plot for Google Colab.
+Luminescence lifetime plot — reproducible figure for Google Colab.
 
 HOW TO USE
 ----------
 1. Upload your decay file to Colab and set DATA_PATH below.
 2. Run the cell. The tail after the peak is fit with a bi- and a
    tri-exponential model; whichever fits better (by BIC) is kept, and the
-   R^2, amplitudes (a_i), lifetimes (tau_i) and average tau are printed on
-   the plot. Set FORCE_COMPONENTS = 3 to force a triexponential fit.
-3. Edit the CONFIG block to restyle the figure.
+   R^2, amplitudes (a_i), lifetimes (tau_i) and average tau are printed on the
+   plot. Set FORCE_COMPONENTS = 3 to force a triexponential fit.
+3. Edit the CONFIG constants to restyle titles, labels, fonts, sizes, colors.
 """
 
 # ============================ CONFIG =================================
 DATA_PATH = "INSERT DATA PATH HERE"
+FORCE_COMPONENTS = None      # None = auto-pick 2 vs 3; or set 2 or 3
+'''
 
-TITLE   = "__TITLE__"
-X_LABEL = "__XLABEL__"
-Y_LABEL = "__YLABEL__"
+_LIFETIME_BODY = '''
+DATA_COLOR = __DATACOLOR__
+UNIT = __UNIT__
 
-FORCE_COMPONENTS = None    # None = auto-pick 2 vs 3; or set 2 or 3
-
-TITLE_SIZE  = 16
-LABEL_SIZE  = 14
-TICK_SIZE   = 11
-LEGEND_SIZE = 9
-ANNOT_SIZE  = 8
-
-LINE_WIDTH  = 1.4
-FIG_W, FIG_H = 6.0, 4.3
-SAVE_AS = "lifetime.png"   # set to None to skip saving
+SAVE_AS = "lifetime.png"     # set to None to skip saving
 # =====================================================================
 
 __LOADER__
 
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
-
-UNIT = "__UNIT__"
 
 
 def biexp(t, a1, tau1, a2, tau2, c):
@@ -241,7 +266,6 @@ y = df.iloc[:, 1].to_numpy(float)
 order = np.argsort(x)
 x, y = x[order], y[order]
 
-# Trim the flat pre-pulse baseline, then normalize.
 peak_idx = int(np.argmax(y))
 thresh = 0.03 * np.nanmax(y)
 rise = 0
@@ -293,8 +317,7 @@ else:
 
 fig, ax = plt.subplots(figsize=(FIG_W, FIG_H), dpi=150)
 floor = max(np.nanmin(y[y > 0]) if np.any(y > 0) else 1e-4, 1e-6)
-ax.semilogy(x, np.clip(y, floor, None), color="#2E86C1",
-            linewidth=LINE_WIDTH, label="Data")
+ax.semilogy(x, np.clip(y, floor, None), color=DATA_COLOR, linewidth=LINE_WIDTH, label="Data")
 
 if fit is not None:
     n = fit["n"]
@@ -308,7 +331,7 @@ if fit is not None:
     w = amps/tot if tot > 0 else amps
     tau_avg = float(np.sum(amps*taus)/tot) if tot > 0 else float(np.mean(taus))
     kind = "Tri-exponential" if n == 3 else "Bi-exponential"
-    ax.semilogy(x[peak_idx:], np.clip(fit["yf"], floor, None), color="#333333",
+    ax.semilogy(x[peak_idx:], np.clip(fit["yf"], floor, None), color=TEXT_COLOR,
                 linewidth=1.1, linestyle="--", dashes=(4, 2), label=kind + " fit")
     lines = ["%s fit   R² = %.4f" % (kind, fit["r2"])]
     for i in range(n):
@@ -316,18 +339,31 @@ if fit is not None:
                      % (i+1, amps[i], i+1, taus[i], UNIT, w[i]*100))
     lines.append("c = %.3f" % c)
     lines.append("avg τ = %.2f %s" % (tau_avg, UNIT))
-    ax.text(0.04, 0.04, "\\n".join(lines), transform=ax.transAxes,
-            fontsize=ANNOT_SIZE, ha="left", va="bottom", linespacing=1.7)
+    ax.text(0.04, 0.04, "\\n".join(lines), transform=ax.transAxes, fontsize=ANNOT_SIZE,
+            ha="left", va="bottom", color=TEXT_COLOR, linespacing=1.7, fontfamily=FONT_FAMILY)
     print("\\n".join(lines))
 
 ax.set_ylim(bottom=floor*0.8, top=1.3)
-ax.set_title(TITLE, fontsize=TITLE_SIZE, pad=10)
-ax.set_xlabel(X_LABEL, fontsize=LABEL_SIZE, labelpad=6)
-ax.set_ylabel(Y_LABEL, fontsize=LABEL_SIZE, labelpad=6)
-ax.tick_params(labelsize=TICK_SIZE)
-ax.legend(fontsize=LEGEND_SIZE, frameon=False)
+title = TITLE or "Luminescence Decay"
+xlabel = X_LABEL or ("Time (%s)" % UNIT)
+ylabel = Y_LABEL or "Normalized Intensity (a.u.)"
+ax.set_title(title, fontsize=TITLE_SIZE, fontfamily=FONT_FAMILY, color=TEXT_COLOR, pad=10)
+ax.set_xlabel(xlabel, fontsize=LABEL_SIZE, fontfamily=FONT_FAMILY, color=TEXT_COLOR, labelpad=6)
+ax.set_ylabel(ylabel, fontsize=LABEL_SIZE, fontfamily=FONT_FAMILY, color=TEXT_COLOR, labelpad=6)
+ax.tick_params(labelsize=TICK_SIZE, colors=TEXT_COLOR)
+for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+    lbl.set_fontfamily(FONT_FAMILY)
 ax.spines["top"].set_visible(False)
 ax.spines["right"].set_visible(False)
+for sp in ("left", "bottom"):
+    ax.spines[sp].set_color(TEXT_COLOR)
+if SHOW_GRID:
+    ax.grid(True, alpha=0.3, linewidth=0.5)
+if SHOW_LEGEND:
+    leg = ax.legend(loc=LEGEND_LOC, fontsize=LEGEND_SIZE, frameon=False)
+    for tx in leg.get_texts():
+        tx.set_fontfamily(FONT_FAMILY)
+        tx.set_color(TEXT_COLOR)
 ax.margins(x=0.02)
 fig.tight_layout()
 if SAVE_AS:
@@ -403,21 +439,41 @@ print("n=%d  mean=%.3f  std=%.3f" % (len(vals), mean, std))
 '''
 
 
-def make_colab_script(data_type, labels, unit=None):
-    """Return a Colab-ready script string for a spectra data type."""
-    if data_type == "lifetime":
-        return _subst(_LIFETIME_TEMPLATE,
-                      LOADER=_LOADER,
-                      TITLE=labels["title"],
-                      XLABEL=labels["xlabel"] if not unit else "Time (%s)" % unit,
-                      YLABEL=labels["ylabel"],
-                      UNIT=unit or "ns")
-    # uvvis / emission
-    return _subst(_XY_TEMPLATE,
-                  LOADER=_LOADER,
-                  TITLE=labels["title"],
-                  XLABEL=labels["xlabel"],
-                  YLABEL=labels["ylabel"])
+# ----------------------------------------------------------------------
+# Builders
+# ----------------------------------------------------------------------
+def _build_xy_script(traces, style):
+    lines = ["SPECTRA = ["]
+    for tr in traces:
+        lines.append(
+            '    {"path": "INSERT DATA PATH HERE", "type": %r, "label": %r, "color": %r},'
+            % (tr["data_type"], tr["label"], tr.get("color"))
+        )
+    lines.append("]\n")
+    spectra_block = "\n".join(lines)
+
+    body = (_XY_BODY
+            .replace("__UVMIN__", repr(style.get("uvvis_min", 300.0)))
+            .replace("__UVMAX__", repr(style.get("uvvis_max", 700.0)))
+            .replace("__LOADER__", _LOADER))
+    return _XY_HEADER + spectra_block + _style_config(style) + body
+
+
+def _build_lifetime_script(trace, style):
+    unit = trace.get("unit") or "ns"
+    color = trace.get("color") or "#2E86C1"
+    body = (_LIFETIME_BODY
+            .replace("__DATACOLOR__", repr(color))
+            .replace("__UNIT__", repr(unit))
+            .replace("__LOADER__", _LOADER))
+    return _LIFETIME_HEADER + _style_config(style) + body
+
+
+def make_session_colab(sess):
+    """Return a Colab-ready script reproducing the current session's plot."""
+    if sess["mode"] == "lifetime":
+        return _build_lifetime_script(sess["traces"][0], sess["style"])
+    return _build_xy_script(sess["traces"], sess["style"])
 
 
 def make_tem_colab_script():

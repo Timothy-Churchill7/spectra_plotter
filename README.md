@@ -9,12 +9,33 @@ You start by choosing what kind of data you have:
 |------|--------------|
 | **TEM** | Opens the TEM dot-analyzer workflow: upload a `.tif`, calibrate the scale bar, review/confirm detected dots, then download a **CSV** and a **size histogram**. |
 | **Lifetime** | Upload a decay file → normalized semilog plot with an automatic **bi/tri-exponential fit** (R², amplitudes aᵢ, lifetimes τᵢ, avg τ). |
-| **UV-Vis** | Upload one or more files → normalized xy absorption plot. Overlay multiple traces on one plot. |
-| **Emission** | Upload one or more files → normalized xy emission plot. Overlay multiple traces on one plot. |
+| **UV-Vis** | Upload file(s) → normalized xy absorption plot, cropped to 300–700 nm. |
+| **Emission** | Upload file(s) → normalized xy emission plot. |
 
-Every plot also comes with a **Google Colab-ready Python script** — it has an
-`INSERT DATA PATH HERE` blank and a `CONFIG` block at the top with editable
-titles, axis labels and font sizes, so you can restyle the figure yourself.
+### Building up a spectra plot
+
+After the first UV-Vis / emission plot, the result page lets you **"Plot more
+data on the same graph."** Each time you add data you pick its type, so you can:
+
+- overlay several samples of the **same kind** (each labeled by file name), and
+- mix **emission and absorbance on one plot** — the legend annotates each trace
+  with its kind (e.g. `Sample 1 (Emission)`, `Sample 2 (Absorbance)`).
+
+UV-Vis absorbance traces are cropped to, and normalized within, a **300–700 nm**
+window (editable in the styling panel).
+
+### Styling tool
+
+Every spectra/lifetime result has a **Customize appearance** panel: edit the
+title and axis labels, choose a font, set title/axis/tick/legend font sizes,
+pick a text color, line width and figure size, toggle the legend/grid, and
+rename or recolor each individual trace (or remove it). The plot re-renders
+server-side on **Apply**.
+
+Every plot also comes with a **Google Colab-ready Python script** — an
+`INSERT DATA PATH HERE` blank plus a `CONFIG` block that mirrors the styling
+tool (titles, labels, fonts, sizes, colors, the UV-Vis window, and each
+trace's type/label/color), so your styling travels with the code.
 
 ## Run it
 

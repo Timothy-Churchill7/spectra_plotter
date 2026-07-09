@@ -39,6 +39,40 @@ TRACE_COLORS = ["#2E86C1", "#E67E22", "#27AE60", "#8E44AD",
 LINE_WIDTH = 1.4
 TEXT_COLOR = "#333333"
 
+# UV-Vis absorbance is cropped to (and normalized within) this window.
+UVVIS_MIN = 300.0
+UVVIS_MAX = 700.0
+
+# How each data kind is named in the legend when types are mixed on one plot.
+KIND_LABEL = {"uvvis": "Absorbance", "emission": "Emission", "lifetime": "Lifetime"}
+
+# Font families bundled with matplotlib (always available on any host/Colab),
+# exposed in the styling tool so the choice never fails to render.
+FONT_FAMILIES = ["DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono"]
+
+# The editable style applied to a plot. Copied per session; the styling panel
+# and the generated Colab script both read/write these keys.
+DEFAULT_STYLE = {
+    "title": None,          # None => auto (type-appropriate)
+    "xlabel": None,
+    "ylabel": None,
+    "font_family": "DejaVu Sans",
+    "title_size": 16,
+    "label_size": 14,
+    "tick_size": 11,
+    "legend_size": 10,
+    "annot_size": 8,
+    "text_color": "#333333",
+    "line_width": 1.4,
+    "fig_w": 6.0,
+    "fig_h": 4.3,
+    "show_grid": False,
+    "show_legend": True,
+    "legend_loc": "best",
+    "uvvis_min": UVVIS_MIN,
+    "uvvis_max": UVVIS_MAX,
+}
+
 matplotlib.rcParams.update({
     "font.family": "sans-serif",
     "font.sans-serif": ["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans"],
@@ -351,112 +385,182 @@ def fit_lifetime(x, y, unit="ns"):
 
 
 # ----------------------------------------------------------------------
-# Plotting
+# Per-trace preparation (UV-Vis window crop + normalization)
 # ----------------------------------------------------------------------
-def plot_spectra(traces, data_type, output_path, unit=None, note=None):
-    """traces: list of (x, y, label). Renders a normalized plot to output_path.
-    Returns fit_info (lifetime only) or None."""
-    labels = dict(LABELS[data_type])
-    if data_type == "lifetime" and unit:
-        labels["xlabel"] = f"Time ({unit})"
+def prepare_xy(x, y, data_type, uvvis_min=UVVIS_MIN, uvvis_max=UVVIS_MAX):
+    """Return (x, y_normalized) ready to plot. UV-Vis absorbance is cropped to
+    the [uvvis_min, uvvis_max] nm window and normalized within it; emission is
+    normalized over its full range."""
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    order = np.argsort(x)
+    x, y = x[order], y[order]
+    if data_type == "uvvis":
+        mask = (x >= uvvis_min) & (x <= uvvis_max)
+        if int(mask.sum()) >= 2:
+            x, y = x[mask], y[mask]
+    return x, normalize(y)
 
-    fig = Figure(figsize=(6.0, 4.3), dpi=200)
-    ax = fig.subplots()
-    fit_info = None
-    show_legend = len(traces) > 1
 
-    if data_type == "lifetime":
-        # Single decay trace + fit.
-        x, y, label = traces[0]
-        x, y = trim_leading_baseline(x, y)
-        y = normalize(y)
-        fit_info = fit_lifetime(x, y, unit=unit or "ns")
+# ----------------------------------------------------------------------
+# Style application
+# ----------------------------------------------------------------------
+def _clean_hex(c, fallback):
+    if isinstance(c, str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", c.strip()):
+        return c.strip()
+    return fallback
 
-        floor = max(np.nanmin(y[y > 0]) if np.any(y > 0) else 1e-4, 1e-6)
-        y_plot = np.clip(y, floor, None)
-        ax.semilogy(x, y_plot, color=TRACE_COLORS[0], linewidth=LINE_WIDTH,
-                    solid_capstyle="round", label="Data")
-        ax.set_ylim(bottom=floor * 0.8, top=1.3)
 
-        if fit_info:
-            ax.semilogy(fit_info["x_fit"], np.clip(fit_info["y_fit"], floor, None),
-                        color=TEXT_COLOR, linewidth=1.1, linestyle="--",
-                        dashes=(4, 2), label=f"{fit_info['kind']} fit")
-            ax.legend(loc="upper right", fontsize=9, handlelength=1.6, labelspacing=0.4)
-            ax.text(0.04, 0.04, fit_info["annotation"], transform=ax.transAxes,
-                    fontsize=8, ha="left", va="bottom", color=TEXT_COLOR, linespacing=1.7)
-    else:
-        # uvvis / emission — one or more normalized traces.
-        allmins = []
-        for i, (x, y, label) in enumerate(traces):
-            yn = normalize(y)
-            allmins.append(np.nanmin(yn))
-            ax.plot(x, yn, color=TRACE_COLORS[i % len(TRACE_COLORS)],
-                    linewidth=LINE_WIDTH, solid_capstyle="round", label=label)
-        lo = min(allmins) if allmins else 0.0
-        pad = 0.05
-        ax.set_ylim(lo - pad, 1.0 + pad)
-        if show_legend:
-            ax.legend(loc="best", fontsize=9, handlelength=1.6, labelspacing=0.4)
+def _apply_style(ax, style, title, xlabel, ylabel, show_legend):
+    fam = style.get("font_family", "DejaVu Sans")
+    tc = _clean_hex(style.get("text_color"), TEXT_COLOR)
 
-    if note:
-        ax.text(0.97, 0.95, note, transform=ax.transAxes, fontsize=7.5,
-                ha="right", va="top", color="#888888", style="italic")
-
-    ax.set_xlabel(labels["xlabel"], fontsize=14, labelpad=6)
-    ax.set_ylabel(labels["ylabel"], fontsize=14, labelpad=6)
-    ax.set_title(labels["title"], fontsize=16, pad=10)
+    ax.set_title(title, fontsize=style["title_size"], fontfamily=fam, color=tc, pad=10)
+    ax.set_xlabel(xlabel, fontsize=style["label_size"], fontfamily=fam, color=tc, labelpad=6)
+    ax.set_ylabel(ylabel, fontsize=style["label_size"], fontfamily=fam, color=tc, labelpad=6)
+    ax.tick_params(labelsize=style["tick_size"], colors=tc)
+    for lbl in ax.get_xticklabels() + ax.get_yticklabels():
+        lbl.set_fontfamily(fam)
 
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+    for sp in ("left", "bottom"):
+        ax.spines[sp].set_color(tc)
+
+    if style.get("show_grid"):
+        ax.grid(True, alpha=0.3, linewidth=0.5)
+
+    handles, labels_ = ax.get_legend_handles_labels()
+    if show_legend and style.get("show_legend", True) and handles:
+        leg = ax.legend(loc=style.get("legend_loc", "best"),
+                        fontsize=style["legend_size"], frameon=False,
+                        handlelength=1.6, labelspacing=0.4)
+        for txt in leg.get_texts():
+            txt.set_fontfamily(fam)
+            txt.set_color(tc)
     ax.margins(x=0.02)
+
+
+# ----------------------------------------------------------------------
+# Figure builders (one per mode)
+# ----------------------------------------------------------------------
+def build_xy_figure(traces, style, output_path):
+    """Render one or more UV-Vis / emission traces (possibly mixed) onto one
+    normalized plot. traces: list of dicts {x, y, label, data_type, color}."""
+    types = [t["data_type"] for t in traces]
+    unique = list(dict.fromkeys(types))
+    mixed = len(unique) > 1
+
+    umin = float(style.get("uvvis_min", UVVIS_MIN))
+    umax = float(style.get("uvvis_max", UVVIS_MAX))
+
+    if style.get("title"):
+        title = style["title"]
+    elif mixed:
+        title = "Normalized Spectra"
+    else:
+        title = LABELS[unique[0]]["title"]
+    xlabel = style.get("xlabel") or "Wavelength (nm)"
+    if style.get("ylabel"):
+        ylabel = style["ylabel"]
+    elif mixed:
+        ylabel = "Normalized Signal (a.u.)"
+    else:
+        ylabel = LABELS[unique[0]]["ylabel"]
+
+    fig = Figure(figsize=(style["fig_w"], style["fig_h"]), dpi=200)
+    ax = fig.subplots()
+
+    mins = []
+    for i, t in enumerate(traces):
+        x, y = prepare_xy(t["x"], t["y"], t["data_type"], umin, umax)
+        mins.append(float(np.nanmin(y)) if len(y) else 0.0)
+        color = _clean_hex(t.get("color"), TRACE_COLORS[i % len(TRACE_COLORS)])
+        label = t["label"]
+        if mixed:
+            label = f"{label} ({KIND_LABEL[t['data_type']]})"
+        ax.plot(x, y, color=color, linewidth=style["line_width"],
+                solid_capstyle="round", label=label)
+
+    lo = min(mins) if mins else 0.0
+    ax.set_ylim(lo - 0.05, 1.05)
+    _apply_style(ax, style, title, xlabel, ylabel, show_legend=True)
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=200, bbox_inches="tight")
+    return {"title": title, "xlabel": xlabel, "ylabel": ylabel,
+            "mixed": mixed, "types": unique}
+
+
+def build_lifetime_figure(trace, style, output_path):
+    """Render a single decay trace + its bi/tri-exponential fit."""
+    unit = trace.get("unit") or "ns"
+    x = np.asarray(trace["x"], dtype=float)
+    y = np.asarray(trace["y"], dtype=float)
+    order = np.argsort(x)
+    x, y = x[order], y[order]
+    x, y = trim_leading_baseline(x, y)
+    y = normalize(y)
+    fit_info = fit_lifetime(x, y, unit=unit)
+
+    fam = style.get("font_family", "DejaVu Sans")
+    tc = _clean_hex(style.get("text_color"), TEXT_COLOR)
+    data_color = _clean_hex(trace.get("color"), TRACE_COLORS[0])
+
+    fig = Figure(figsize=(style["fig_w"], style["fig_h"]), dpi=200)
+    ax = fig.subplots()
+
+    floor = max(np.nanmin(y[y > 0]) if np.any(y > 0) else 1e-4, 1e-6)
+    ax.semilogy(x, np.clip(y, floor, None), color=data_color,
+                linewidth=style["line_width"], solid_capstyle="round", label="Data")
+    ax.set_ylim(bottom=floor * 0.8, top=1.3)
+
+    if fit_info:
+        ax.semilogy(fit_info["x_fit"], np.clip(fit_info["y_fit"], floor, None),
+                    color=tc, linewidth=1.1, linestyle="--", dashes=(4, 2),
+                    label=f"{fit_info['kind']} fit")
+        ax.text(0.04, 0.04, fit_info["annotation"], transform=ax.transAxes,
+                fontsize=style.get("annot_size", 8), ha="left", va="bottom",
+                color=tc, linespacing=1.7, fontfamily=fam)
+
+    title = style.get("title") or LABELS["lifetime"]["title"]
+    xlabel = style.get("xlabel") or f"Time ({unit})"
+    ylabel = style.get("ylabel") or LABELS["lifetime"]["ylabel"]
+    _apply_style(ax, style, title, xlabel, ylabel, show_legend=True)
+
     fig.tight_layout()
     fig.savefig(output_path, dpi=200, bbox_inches="tight")
     return fit_info
 
 
 # ----------------------------------------------------------------------
-# High-level entry used by the web app
+# Loading + session rendering (used by app.py)
 # ----------------------------------------------------------------------
-def process_spectra(input_paths, data_type, output_path, trace_labels=None):
-    """Load one or more files, build normalized traces, render a plot.
-
-    trace_labels: optional list of legend names aligned with input_paths
-    (defaults to each file's stem).
-
-    Returns dict: {"data_type", "unit", "note", "fit_info", "labels",
-                   "trace_labels"}.
-    """
-    if isinstance(input_paths, (str, Path)):
-        input_paths = [input_paths]
-
-    unit = None
-    note = None
-    traces = []
-    for i, p in enumerate(input_paths):
-        p = Path(p)
-        df = load_table(p)
-        x, y, n = extract_xy(df, data_type)
-        if n:
-            note = n
-        if data_type == "lifetime":
-            unit = detect_time_unit(df)
-        if trace_labels and i < len(trace_labels) and trace_labels[i]:
-            label = trace_labels[i]
-        else:
-            label = p.stem
-        traces.append((x, y, label))
-
-    if data_type == "lifetime" and len(traces) > 1:
-        # A tri-exponential fit only makes sense on a single decay curve.
-        traces = traces[:1]
-
-    fit_info = plot_spectra(traces, data_type, output_path, unit=unit, note=note)
+def load_trace(path, data_type, label=None):
+    """Load a file into a trace dict: {x, y, label, data_type, unit, note, color}."""
+    p = Path(path)
+    df = load_table(p)
+    x, y, note = extract_xy(df, data_type)
+    unit = detect_time_unit(df) if data_type == "lifetime" else None
     return {
+        "x": [float(v) for v in x],
+        "y": [float(v) for v in y],
+        "label": label or p.stem,
         "data_type": data_type,
         "unit": unit,
         "note": note,
-        "fit_info": fit_info,
-        "labels": LABELS[data_type],
-        "trace_labels": [t[2] for t in traces],
+        "color": None,
     }
+
+
+def render_session(session, output_path):
+    """Render the current session's plot. Returns {"meta": ...} for xy mode or
+    {"fit_info": ...} for lifetime mode."""
+    style = session["style"]
+    if session["mode"] == "lifetime":
+        fit_info = build_lifetime_figure(session["traces"][0], style, output_path)
+        if fit_info:
+            fit_info["unit"] = session["traces"][0].get("unit")
+        return {"fit_info": fit_info}
+    meta = build_xy_figure(session["traces"], style, output_path)
+    return {"meta": meta}

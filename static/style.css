@@ -136,3 +136,62 @@ header.site p { opacity: 0.85; font-size: 0.95rem; margin-top: 6px; }
 
 .backlink { display: inline-block; margin-top: 26px; color: #64748b; font-size: 0.9rem; }
 .backlink:hover { color: #2E86C1; }
+
+/* ── Multi-panel result page ───────────────────────────────── */
+.container .panel { margin-bottom: 22px; }
+.panel-title { font-size: 1.1rem; color: #1f3a5f; margin-bottom: 4px; }
+
+.input {
+  width: 100%;
+  border: 1px solid #cdd8e6;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  color: #1a2330;
+  background: #fff;
+}
+.input:focus { outline: none; border-color: #2E86C1; }
+
+/* Add-more form */
+.add-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.add-form .input { width: auto; min-width: 190px; }
+.file-pick {
+  flex: 1 1 220px;
+  border: 1px dashed #b9c7d8; border-radius: 8px; padding: 8px 12px;
+  color: #64748b; cursor: pointer; font-size: 0.88rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.file-pick:hover { border-color: #2E86C1; background: #f4f9fe; }
+.file-pick input { display: none; }
+
+/* Trace editor rows */
+.trace-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.trace-row { display: flex; align-items: center; gap: 10px; }
+.color-dot {
+  width: 34px; height: 34px; padding: 0; border: 1px solid #cdd8e6;
+  border-radius: 8px; background: none; cursor: pointer; flex: 0 0 auto;
+}
+.trace-label { flex: 1 1 auto; max-width: 320px; }
+.kind-tag {
+  font-size: 0.72rem; color: #1f6cab; background: #e8f2fb;
+  padding: 3px 9px; border-radius: 999px; font-weight: 600; white-space: nowrap;
+}
+.rm-form { margin: 0; }
+.rm-btn {
+  border: none; background: #f3f5f8; color: #94a3b8; width: 28px; height: 28px;
+  border-radius: 7px; cursor: pointer; font-size: 0.85rem; line-height: 1;
+}
+.rm-btn:hover { background: #fdecea; color: #c0392b; }
+
+/* Style form grid */
+.field-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px 16px;
+}
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field > span { font-size: 0.76rem; color: #64748b; font-weight: 600; }
+.color-full { height: 38px; padding: 3px; cursor: pointer; }
+.check-row { display: flex; gap: 22px; margin: 20px 0; }
+.chk { font-size: 0.9rem; color: #37474f; display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.style-form .btn { margin-top: 4px; }
