@@ -6,7 +6,8 @@ Generates self-contained Google-Colab notebooks (.ipynb) that reproduce each
 plot the web app makes. Every notebook:
 
   * starts by mounting the user's Google Drive,
-  * has an obvious `INSERT DATA PATH HERE` blank in a dedicated Config cell,
+  * pre-fills the data path with the lab Drive folder and an `ENTER FOLDER HERE`
+    blank in a dedicated Config cell,
   * exposes editable constants for every title, label, font, size and color
     (mirroring the in-app styling tool),
   * needs only the libraries Colab already ships with (pandas, numpy, scipy,
@@ -18,11 +19,17 @@ open them straight in Colab.
 
 import json
 
+# Default data path pre-filled in every notebook. Users replace
+# "ENTER FOLDER HERE" with their data folder and append the file name.
+DEFAULT_DATA_PATH = ("/content/drive/Shared drives/Olshansky Lab/"
+                     "Lab Notebooks/29 Tim Churchill/Data/ENTER FOLDER HERE/")
+
 # ----------------------------------------------------------------------
 # The first code cell every notebook shares: mount Google Drive.
 # ----------------------------------------------------------------------
 _DRIVE_CELL = '''# Mount your Google Drive so the paths below can point at files in it.
-# After running this, your files live under /content/drive/MyDrive/...
+# Personal files live under /content/drive/MyDrive/...; shared drives (like the
+# lab's) live under "/content/drive/Shared drives/...".
 from google.colab import drive
 drive.mount('/content/drive')'''
 
@@ -175,11 +182,11 @@ Reproducible figure for Google Colab (UV-Vis / emission).
 
 **How to use**
 1. Run the **Mount Drive** cell.
-2. In the **Config** cell, replace each `INSERT DATA PATH HERE` with the path to
-   your data file (e.g. `/content/drive/MyDrive/data/sample.csv`). Each entry
-   carries its data `type` and legend `label`; add or remove entries to change
-   what is overlaid. Mixing `uvvis` and `emission` is fine — the legend is
-   annotated with the kind automatically.
+2. In the **Config** cell, each `SPECTRA` entry's `path` is pre-filled with the
+   lab Drive folder; replace `ENTER FOLDER HERE` with your data folder and add
+   the file name. Each entry carries its data `type` and legend `label`; add or
+   remove entries to change what is overlaid. Mixing `uvvis` and `emission` on
+   one plot is fine.
 3. Run the remaining cells. Edit the constants in the Config cell to restyle
    titles, labels, fonts, sizes and colors.
 
@@ -190,7 +197,6 @@ _XY_PLOT = '''import matplotlib.pyplot as plt
 
 COLORS = ["#2E86C1", "#E67E22", "#27AE60", "#8E44AD",
           "#C0392B", "#16A085", "#D4AC0D", "#5D6D7E"]
-KIND = {"uvvis": "Absorbance", "emission": "Emission"}
 AUTO_TITLE = {"uvvis": "UV-Vis Absorption Spectrum", "emission": "Emission Spectrum"}
 AUTO_YLABEL = {"uvvis": "Normalized Absorbance",
                "emission": "Normalized Emission Intensity (a.u.)"}
@@ -209,8 +215,7 @@ for i, s in enumerate(SPECTRA):
             x, y = x[m], y[m]
     y = normalize(y)
     color = s.get("color") or COLORS[i % len(COLORS)]
-    label = s["label"] + ((" (%s)" % KIND[s["type"]]) if mixed else "")
-    ax.plot(x, y, color=color, linewidth=LINE_WIDTH, solid_capstyle="round", label=label)
+    ax.plot(x, y, color=color, linewidth=LINE_WIDTH, solid_capstyle="round", label=s["label"])
 
 title = TITLE or ("Normalized Spectra" if mixed else AUTO_TITLE[unique[0]])
 xlabel = X_LABEL or "Wavelength (nm)"
@@ -249,8 +254,8 @@ Reproducible figure for Google Colab (TCSPC decay).
 
 **How to use**
 1. Run the **Mount Drive** cell.
-2. In the **Config** cell, set `DATA_PATH` to your decay file (e.g.
-   `/content/drive/MyDrive/data/decay.csv`).
+2. In the **Config** cell, `DATA_PATH` is pre-filled with the lab Drive folder;
+   replace `ENTER FOLDER HERE` with your data folder and add the decay file name.
 3. Run the remaining cells. The tail after the peak is fit with a bi- and a
    tri-exponential model; whichever fits better (by BIC) is kept, and the
    R², amplitudes (`a_i`), lifetimes (`tau_i`) and average tau are printed on
@@ -393,13 +398,14 @@ Reproducible figure for Google Colab.
 
 **How to use**
 1. Run the **Mount Drive** cell.
-2. Download the CSV from the TEM Dot Analyzer, put it in your Drive, and set
-   `DATA_PATH` (e.g. `/content/drive/MyDrive/data/quantum_dots.csv`).
+2. Download the CSV from the TEM Dot Analyzer and put it in your Drive. In the
+   **Config** cell, `DATA_PATH` is pre-filled with the lab Drive folder; replace
+   `ENTER FOLDER HERE` with your data folder and add the CSV file name.
 3. Run the remaining cells. The CSV has a `length_nm` column (dot diameter in
    nm); if your run was not scale-calibrated, switch `VALUE_COLUMN` to
    `"length_px"`. Edit the Config constants to restyle.'''
 
-_TEM_CONFIG = '''DATA_PATH = "INSERT DATA PATH HERE"
+_TEM_CONFIG = '''DATA_PATH = "__DEFAULT_DATA_PATH__"
 
 VALUE_COLUMN = "length_nm"     # or "length_px" if not calibrated
 N_BINS = 20
@@ -452,8 +458,8 @@ def _xy_config(traces, style):
     lines = ["SPECTRA = ["]
     for tr in traces:
         lines.append(
-            '    {"path": "INSERT DATA PATH HERE", "type": %r, "label": %r, "color": %r},'
-            % (tr["data_type"], tr["label"], tr.get("color"))
+            '    {"path": %r, "type": %r, "label": %r, "color": %r},'
+            % (DEFAULT_DATA_PATH, tr["data_type"], tr["label"], tr.get("color"))
         )
     lines.append("]\n")
     window = (
@@ -469,7 +475,7 @@ def _lifetime_config(trace, style):
     unit = trace.get("unit") or "ns"
     color = trace.get("color") or "#2E86C1"
     head = (
-        'DATA_PATH = "INSERT DATA PATH HERE"\n'
+        f"DATA_PATH = {DEFAULT_DATA_PATH!r}\n"
         "FORCE_COMPONENTS = None      # None = auto-pick 2 vs 3; or set 2 or 3\n"
         f"DATA_COLOR = {color!r}\n"
         f"UNIT = {unit!r}\n\n"
@@ -507,6 +513,6 @@ def make_tem_notebook():
     return _notebook([
         ("markdown", _TEM_INTRO),
         ("code", _DRIVE_CELL),
-        ("code", _TEM_CONFIG),
+        ("code", _TEM_CONFIG.replace("__DEFAULT_DATA_PATH__", DEFAULT_DATA_PATH)),
         ("code", _TEM_PLOT),
     ])

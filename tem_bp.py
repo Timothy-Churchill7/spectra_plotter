@@ -1145,7 +1145,7 @@ DONE_HTML = """<!DOCTYPE html>
       <p class="hist-note">
         Grab the CSV + the Colab notebook below to re-plot this histogram yourself —
         the notebook mounts your Google Drive, has a clearly-marked
-        <code>INSERT DATA PATH HERE</code> blank and editable title / axis-label /
+        <code>ENTER FOLDER HERE</code> path blank and editable title / axis-label /
         font-size settings.
       </p>
     </div>

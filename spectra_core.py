@@ -248,6 +248,27 @@ def extract_xy(df: pd.DataFrame, data_type: str):
     return x, y, note
 
 
+# Category words used in auto-generated trace labels.
+CATEGORY_WORD = {"emission": "emission", "uvvis": "absorbance", "lifetime": "lifetime"}
+
+# A sample ID at the START of a file name: 2-4 initials, optional separator,
+# then a number — e.g. "TC03", "JM_02016". Anchored so arbitrary words/versions
+# ("weird final v3") don't produce false IDs.
+_SAMPLE_ID_RE = re.compile(r"^[A-Za-z]{2,4}[\s_-]?\d{1,5}")
+
+
+def make_label(filename_stem: str, data_type: str) -> str:
+    """Build a short legend label from a file name: '<ID> · <category>'
+    (e.g. 'TC03 · emission'). Returns '' when no clean sample ID is found, so
+    the user can fill it in rather than a long/wrong file name blocking the plot."""
+    cat = CATEGORY_WORD.get(data_type, data_type)
+    m = _SAMPLE_ID_RE.match((filename_stem or "").strip())
+    if not m:
+        return ""
+    ident = re.sub(r"[\s_-]", "", m.group(0)).upper()
+    return f"{ident} · {cat}"
+
+
 def detect_time_unit(df: pd.DataFrame) -> str:
     header = str(df.columns[0]).lower()
     for unit in ("ns", "µs", "us", "ms", "ps", "s"):
@@ -475,11 +496,10 @@ def build_xy_figure(traces, style, output_path):
         x, y = prepare_xy(t["x"], t["y"], t["data_type"], umin, umax)
         mins.append(float(np.nanmin(y)) if len(y) else 0.0)
         color = _clean_hex(t.get("color"), TRACE_COLORS[i % len(TRACE_COLORS)])
-        label = t["label"]
-        if mixed:
-            label = f"{label} ({KIND_LABEL[t['data_type']]})"
+        # The label already carries the category (e.g. "TC03 · emission"), so no
+        # kind suffix is needed even when emission + absorbance are mixed.
         ax.plot(x, y, color=color, linewidth=style["line_width"],
-                solid_capstyle="round", label=label)
+                solid_capstyle="round", label=t["label"])
 
     lo = min(mins) if mins else 0.0
     ax.set_ylim(lo - 0.05, 1.05)
@@ -544,7 +564,8 @@ def load_trace(path, data_type, label=None):
     return {
         "x": [float(v) for v in x],
         "y": [float(v) for v in y],
-        "label": label or p.stem,
+        # An explicit "" (no clean sample ID) is kept as-is for the user to fill in.
+        "label": label if label is not None else make_label(p.stem, data_type),
         "data_type": data_type,
         "unit": unit,
         "note": note,

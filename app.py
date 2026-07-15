@@ -10,7 +10,7 @@ Landing page lets the user pick their data type:
     * Lifetime  → decay plot + bi/tri-exponential fit (R², coefficients)
 
 For every generated plot the app also hands back a Colab-ready Python script
-with an `INSERT DATA PATH HERE` blank and editable label/font-size settings.
+with an `ENTER FOLDER HERE` path blank and editable label/font-size settings.
 
 Run:
     python app.py            (dev)
@@ -28,7 +28,7 @@ from flask import (Flask, render_template, request, url_for,
 from werkzeug.utils import secure_filename
 
 from spectra_core import (load_trace, render_session, DEFAULT_STYLE, LABELS,
-                          FONT_FAMILIES, KIND_LABEL, TRACE_COLORS)
+                          FONT_FAMILIES, KIND_LABEL, TRACE_COLORS, make_label)
 from colab import make_session_notebook
 from tem_bp import tem_bp
 
@@ -98,7 +98,8 @@ def _add_uploads(files, data_type, sess):
         tmp = UPLOAD_DIR / f"{uuid.uuid4().hex}{ext}"
         f.save(tmp)
         try:
-            tr = load_trace(str(tmp), data_type, label=Path(fname).stem)
+            tr = load_trace(str(tmp), data_type,
+                            label=make_label(Path(fname).stem, data_type))
         finally:
             tmp.unlink(missing_ok=True)
         sess["traces"].append(tr)
@@ -151,11 +152,12 @@ def _apply_style_form(sess, form):
     loc = form.get("legend_loc", "best")
     s["legend_loc"] = loc if loc in LEGEND_LOCS else "best"
 
-    # Per-trace label + color overrides.
+    # Per-trace label + color overrides. The label box is prefilled with the
+    # current label, so we take it verbatim — allowing the user to edit it, or
+    # clear it back to blank.
     for i, tr in enumerate(sess["traces"]):
-        lbl = form.get(f"label_{i}", "").strip()
-        if lbl:
-            tr["label"] = lbl
+        if f"label_{i}" in form:
+            tr["label"] = form.get(f"label_{i}", "").strip()
         col = form.get(f"color_{i}", "").strip()
         if re.fullmatch(r"#[0-9A-Fa-f]{6}", col):
             tr["color"] = col

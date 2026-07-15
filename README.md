@@ -40,7 +40,8 @@ from google.colab import drive
 drive.mount('/content/drive')
 ```
 
-followed by a **Config** cell (the `INSERT DATA PATH HERE` blanks plus constants
+followed by a **Config** cell (the data path pre-filled with the lab Drive
+folder and an `ENTER FOLDER HERE` blank, plus constants
 that mirror the styling tool — titles, labels, fonts, sizes, colors, the UV-Vis
 window, and each trace's type/label/color) and the plotting cells. So you point
 the paths at files in your Drive, run, and reproduce the exact styled figure.

@@ -87,7 +87,7 @@
           <input form="styleform" type="color" name="color_{{ t.index }}" value="{{ t.color }}"
                  class="color-dot" title="Trace color">
           <input form="styleform" type="text" name="label_{{ t.index }}" value="{{ t.label }}"
-                 class="input trace-label" placeholder="Sample name">
+                 class="input trace-label" placeholder="e.g. TC03 · {{ t.kind|lower }}">
           <span class="kind-tag">{{ t.kind }}</span>
           {% if traces_view|length > 1 or mode == 'xy' %}
           <form action="{{ url_for('spectra_remove') }}" method="post" class="rm-form">
