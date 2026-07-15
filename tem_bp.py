@@ -28,7 +28,7 @@ from tem_dot_analyzer import (
     detect_blobs, detect_info_bar_row, detect_scale_bar_pixels,
     process_blobs, save_annotated_image,
 )
-from colab import make_tem_colab_script
+from colab import make_tem_notebook
 
 # ── App setup ─────────────────────────────────────────────────────────────────
 tem_bp = Blueprint("tem", __name__, url_prefix="/tem")
@@ -403,10 +403,10 @@ def histogram_download():
 
 @tem_bp.route("/colab")
 def colab_script():
-    buf = io.BytesIO(make_tem_colab_script().encode("utf-8"))
+    buf = io.BytesIO(make_tem_notebook().encode("utf-8"))
     return send_file(buf, as_attachment=True,
-                     download_name="tem_histogram_colab.py",
-                     mimetype="text/x-python")
+                     download_name="tem_histogram_colab.ipynb",
+                     mimetype="application/x-ipynb+json")
 
 
 @tem_bp.route("/image/<filename>")
@@ -1143,16 +1143,17 @@ DONE_HTML = """<!DOCTYPE html>
       </h3>
       <img class="hist-img" src="/tem/histogram.png?v={{ total_dots }}" alt="Dot size histogram">
       <p class="hist-note">
-        Grab the CSV + the Colab script below to re-plot this histogram yourself —
-        the script has a clearly-marked <code>INSERT DATA PATH HERE</code> blank and
-        editable title / axis-label / font-size settings at the top.
+        Grab the CSV + the Colab notebook below to re-plot this histogram yourself —
+        the notebook mounts your Google Drive, has a clearly-marked
+        <code>INSERT DATA PATH HERE</code> blank and editable title / axis-label /
+        font-size settings.
       </p>
     </div>
 
     <div class="action-row">
       <a href="/tem/download" class="btn btn-success btn-lg">⬇ Download CSV</a>
       <a href="/tem/histogram/download" class="btn btn-primary btn-lg">⬇ Histogram PNG</a>
-      <a href="/tem/colab" class="btn btn-primary btn-lg">🐍 Colab script</a>
+      <a href="/tem/colab" class="btn btn-primary btn-lg">📓 Colab notebook</a>
     </div>
     <div class="action-row" style="margin-top:14px;">
       <a href="/tem" class="btn btn-outline">＋ Add Another TIF</a>

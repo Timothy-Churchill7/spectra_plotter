@@ -32,10 +32,18 @@ pick a text color, line width and figure size, toggle the legend/grid, and
 rename or recolor each individual trace (or remove it). The plot re-renders
 server-side on **Apply**.
 
-Every plot also comes with a **Google Colab-ready Python script** — an
-`INSERT DATA PATH HERE` blank plus a `CONFIG` block that mirrors the styling
-tool (titles, labels, fonts, sizes, colors, the UV-Vis window, and each
-trace's type/label/color), so your styling travels with the code.
+Every plot also comes with a **Google Colab notebook (`.ipynb`)**. It opens with
+a cell that mounts your Google Drive:
+
+```python
+from google.colab import drive
+drive.mount('/content/drive')
+```
+
+followed by a **Config** cell (the `INSERT DATA PATH HERE` blanks plus constants
+that mirror the styling tool — titles, labels, fonts, sizes, colors, the UV-Vis
+window, and each trace's type/label/color) and the plotting cells. So you point
+the paths at files in your Drive, run, and reproduce the exact styled figure.
 
 ## Run it
 
@@ -54,7 +62,7 @@ For production: `gunicorn app:app`.
 - `spectra_core.py` — file parsing + plotting for the three spectra types.
 - `tem_bp.py` — the TEM analyzer, as a Flask blueprint mounted at `/tem`, plus the size histogram.
 - `tem_dot_analyzer.py` — dot-detection / scale-bar logic (unchanged from the original tool).
-- `colab.py` — generates the downloadable Colab scripts.
+- `colab.py` — generates the downloadable Colab notebooks (`.ipynb`).
 - `templates/`, `static/` — landing, upload and result pages + styling.
 - `samples/` — example data files (UV-Vis, emission, lifetime) for testing.
 
@@ -62,5 +70,5 @@ For production: `gunicorn app:app`.
 
 - Accepted spectra formats: `.csv`, `.txt`, `.xlsx` (instrument metadata headers are skipped automatically).
 - All spectra traces are peak-normalized (peak = 1.0).
-- The lifetime fit keeps whichever of a bi- or tri-exponential model fits better (by BIC); set `FORCE_COMPONENTS = 3` in the Colab script to force a triexponential.
+- The lifetime fit keeps whichever of a bi- or tri-exponential model fits better (by BIC); set `FORCE_COMPONENTS = 3` in the Colab notebook's Config cell to force a triexponential.
 - Plotting uses matplotlib's object-oriented `Figure` API (no `pyplot` global state) so it's safe under the threaded dev server.

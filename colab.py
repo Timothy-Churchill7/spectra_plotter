@@ -2,23 +2,33 @@
 """
 colab.py
 
-Generates self-contained, Google-Colab-ready Python scripts that reproduce each
-plot the web app makes. Every script:
+Generates self-contained Google-Colab notebooks (.ipynb) that reproduce each
+plot the web app makes. Every notebook:
 
-  * has an obvious `INSERT DATA PATH HERE` blank at the top,
-  * exposes editable CONFIG constants for every title, label, font, size and
-    color (mirroring the in-app styling tool),
+  * starts by mounting the user's Google Drive,
+  * has an obvious `INSERT DATA PATH HERE` blank in a dedicated Config cell,
+  * exposes editable constants for every title, label, font, size and color
+    (mirroring the in-app styling tool),
   * needs only the libraries Colab already ships with (pandas, numpy, scipy,
     matplotlib) plus openpyxl for .xlsx.
 
-The scripts are intentionally standalone (they do NOT import this project) so a
-user can paste them straight into a Colab cell.
+The notebooks are standalone (they do NOT import this project), so a user can
+open them straight in Colab.
 """
 
-# A compact, tolerant loader shared by the spectra scripts. Kept as plain text
-# so it can be embedded verbatim into the generated files.
-_LOADER = r'''
-import re
+import json
+
+# ----------------------------------------------------------------------
+# The first code cell every notebook shares: mount Google Drive.
+# ----------------------------------------------------------------------
+_DRIVE_CELL = '''# Mount your Google Drive so the paths below can point at files in it.
+# After running this, your files live under /content/drive/MyDrive/...
+from google.colab import drive
+drive.mount('/content/drive')'''
+
+
+# A compact, tolerant loader shared by the spectra notebooks.
+_LOADER = r'''import re
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -90,13 +100,51 @@ def load_table(path):
 def normalize(y):
     peak = np.nanmax(np.abs(y))
     return y if peak == 0 else y / peak
-'''
+
+
+def pick_xy(df):
+    """x = first column; y = first following column whose header is NOT a
+    baseline/blank trace. A 'baseline' column means the signal is already
+    baseline-subtracted, so it is skipped rather than subtracted again."""
+    y_idx = 1
+    for i, c in enumerate(df.columns):
+        if i == 0 or re.search(r"baseline|\bblank\b", str(c), re.I):
+            continue
+        y_idx = i
+        break
+    x = df.iloc[:, 0].to_numpy(float)
+    y = df.iloc[:, y_idx].to_numpy(float)
+    order = np.argsort(x)
+    return x[order], y[order]'''
 
 
 # ----------------------------------------------------------------------
-# Shared style CONFIG block (mirrors the in-app styling tool)
+# Notebook assembly helpers
 # ----------------------------------------------------------------------
-def _style_config(style, extra=""):
+def _cell(cell_type, text):
+    src = text.strip("\n").splitlines(keepends=True)
+    cell = {"cell_type": cell_type, "metadata": {}, "source": src}
+    if cell_type == "code":
+        cell["execution_count"] = None
+        cell["outputs"] = []
+    return cell
+
+
+def _notebook(cells):
+    nb = {
+        "cells": [_cell(t, s) for (t, s) in cells],
+        "metadata": {
+            "colab": {"provenance": []},
+            "kernelspec": {"display_name": "Python 3", "name": "python3"},
+            "language_info": {"name": "python"},
+        },
+        "nbformat": 4,
+        "nbformat_minor": 0,
+    }
+    return json.dumps(nb, indent=1)
+
+
+def _style_config(style):
     return (
         "# ----- Titles / labels (None = auto) -----\n"
         f"TITLE   = {style.get('title')!r}\n"
@@ -114,46 +162,31 @@ def _style_config(style, extra=""):
         f"FIG_W, FIG_H = {style['fig_w']}, {style['fig_h']}\n"
         f"SHOW_GRID   = {bool(style['show_grid'])}\n"
         f"SHOW_LEGEND = {bool(style['show_legend'])}\n"
-        f"LEGEND_LOC  = {style['legend_loc']!r}\n"
-        + extra
+        f"LEGEND_LOC  = {style['legend_loc']!r}"
     )
 
 
 # ----------------------------------------------------------------------
 # UV-Vis / Emission (xy, one or more overlaid & possibly mixed traces)
 # ----------------------------------------------------------------------
-_XY_HEADER = '''#!/usr/bin/env python3
-"""
-Normalized spectra plot — reproducible figure for Google Colab.
+_XY_INTRO = '''# Normalized spectra plot
 
-HOW TO USE
-----------
-1. Upload your data file(s) to Colab (folder icon on the left, or drag-drop).
-2. Fill in each "INSERT DATA PATH HERE" in SPECTRA below with the file path.
-   Each entry already carries its data "type" and legend "label" — add or
-   remove entries to change what is overlaid. Mixing "uvvis" and "emission"
-   is fine; the legend is annotated with the kind automatically.
-3. Run the cell. Edit the CONFIG constants to restyle titles, labels, fonts,
-   sizes and colors.
+Reproducible figure for Google Colab (UV-Vis / emission).
 
-UV-Vis ("uvvis") traces are cropped to the UVVIS_MIN..UVVIS_MAX window and
-normalized within it; emission traces are normalized over their full range.
-"""
+**How to use**
+1. Run the **Mount Drive** cell.
+2. In the **Config** cell, replace each `INSERT DATA PATH HERE` with the path to
+   your data file (e.g. `/content/drive/MyDrive/data/sample.csv`). Each entry
+   carries its data `type` and legend `label`; add or remove entries to change
+   what is overlaid. Mixing `uvvis` and `emission` is fine — the legend is
+   annotated with the kind automatically.
+3. Run the remaining cells. Edit the constants in the Config cell to restyle
+   titles, labels, fonts, sizes and colors.
 
-# ============================ CONFIG =================================
-'''
+UV-Vis (`uvvis`) traces are cropped to the `UVVIS_MIN..UVVIS_MAX` window and
+normalized within it; emission traces are normalized over their full range.'''
 
-_XY_BODY = '''
-# ----- UV-Vis normalization window (nm) -----
-UVVIS_MIN = __UVMIN__
-UVVIS_MAX = __UVMAX__
-
-SAVE_AS = "plot.png"     # set to None to skip saving
-# =====================================================================
-
-__LOADER__
-
-import matplotlib.pyplot as plt
+_XY_PLOT = '''import matplotlib.pyplot as plt
 
 COLORS = ["#2E86C1", "#E67E22", "#27AE60", "#8E44AD",
           "#C0392B", "#16A085", "#D4AC0D", "#5D6D7E"]
@@ -169,10 +202,7 @@ mixed = len(unique) > 1
 fig, ax = plt.subplots(figsize=(FIG_W, FIG_H), dpi=150)
 for i, s in enumerate(SPECTRA):
     df = load_table(s["path"])
-    x = df.iloc[:, 0].to_numpy(float)
-    y = df.iloc[:, 1].to_numpy(float)
-    order = np.argsort(x)
-    x, y = x[order], y[order]
+    x, y = pick_xy(df)
     if s["type"] == "uvvis":
         m = (x >= UVVIS_MIN) & (x <= UVVIS_MAX)
         if m.sum() >= 2:
@@ -207,42 +237,28 @@ ax.margins(x=0.02)
 fig.tight_layout()
 if SAVE_AS:
     fig.savefig(SAVE_AS, dpi=300, bbox_inches="tight")
-plt.show()
-'''
+plt.show()'''
 
 
 # ----------------------------------------------------------------------
 # Lifetime (single decay + bi/tri-exponential fit, R^2)
 # ----------------------------------------------------------------------
-_LIFETIME_HEADER = '''#!/usr/bin/env python3
-"""
-Luminescence lifetime plot — reproducible figure for Google Colab.
+_LIFETIME_INTRO = '''# Luminescence lifetime plot
 
-HOW TO USE
-----------
-1. Upload your decay file to Colab and set DATA_PATH below.
-2. Run the cell. The tail after the peak is fit with a bi- and a
+Reproducible figure for Google Colab (TCSPC decay).
+
+**How to use**
+1. Run the **Mount Drive** cell.
+2. In the **Config** cell, set `DATA_PATH` to your decay file (e.g.
+   `/content/drive/MyDrive/data/decay.csv`).
+3. Run the remaining cells. The tail after the peak is fit with a bi- and a
    tri-exponential model; whichever fits better (by BIC) is kept, and the
-   R^2, amplitudes (a_i), lifetimes (tau_i) and average tau are printed on the
-   plot. Set FORCE_COMPONENTS = 3 to force a triexponential fit.
-3. Edit the CONFIG constants to restyle titles, labels, fonts, sizes, colors.
-"""
+   R², amplitudes (`a_i`), lifetimes (`tau_i`) and average tau are printed on
+   the plot. Set `FORCE_COMPONENTS = 3` to force a triexponential fit.
 
-# ============================ CONFIG =================================
-DATA_PATH = "INSERT DATA PATH HERE"
-FORCE_COMPONENTS = None      # None = auto-pick 2 vs 3; or set 2 or 3
-'''
+Edit the Config constants to restyle titles, labels, fonts, sizes and colors.'''
 
-_LIFETIME_BODY = '''
-DATA_COLOR = __DATACOLOR__
-UNIT = __UNIT__
-
-SAVE_AS = "lifetime.png"     # set to None to skip saving
-# =====================================================================
-
-__LOADER__
-
-from scipy.optimize import curve_fit
+_LIFETIME_PLOT = '''from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 
 
@@ -261,10 +277,7 @@ def r_squared(y, yf):
 
 
 df = load_table(DATA_PATH)
-x = df.iloc[:, 0].to_numpy(float)
-y = df.iloc[:, 1].to_numpy(float)
-order = np.argsort(x)
-x, y = x[order], y[order]
+x, y = pick_xy(df)
 
 peak_idx = int(np.argmax(y))
 thresh = 0.03 * np.nanmax(y)
@@ -368,30 +381,25 @@ ax.margins(x=0.02)
 fig.tight_layout()
 if SAVE_AS:
     fig.savefig(SAVE_AS, dpi=300, bbox_inches="tight")
-plt.show()
-'''
+plt.show()'''
 
 
 # ----------------------------------------------------------------------
 # TEM histogram (from the exported quantum_dots.csv)
 # ----------------------------------------------------------------------
-_TEM_TEMPLATE = '''#!/usr/bin/env python3
-"""
-TEM quantum-dot size histogram — reproducible plot for Google Colab.
+_TEM_INTRO = '''# TEM quantum-dot size histogram
 
-HOW TO USE
-----------
-1. Download the CSV from the TEM Dot Analyzer, upload it to Colab, and set
-   DATA_PATH below.
-2. Run the cell. It plots a histogram of the measured dot sizes and prints the
-   mean / standard deviation. Edit the CONFIG block to restyle.
+Reproducible figure for Google Colab.
 
-The CSV has a `length_nm` column (dot diameter in nm). If your run was not
-scale-calibrated, switch VALUE_COLUMN to "length_px".
-"""
+**How to use**
+1. Run the **Mount Drive** cell.
+2. Download the CSV from the TEM Dot Analyzer, put it in your Drive, and set
+   `DATA_PATH` (e.g. `/content/drive/MyDrive/data/quantum_dots.csv`).
+3. Run the remaining cells. The CSV has a `length_nm` column (dot diameter in
+   nm); if your run was not scale-calibrated, switch `VALUE_COLUMN` to
+   `"length_px"`. Edit the Config constants to restyle.'''
 
-# ============================ CONFIG =================================
-DATA_PATH = "INSERT DATA PATH HERE"
+_TEM_CONFIG = '''DATA_PATH = "INSERT DATA PATH HERE"
 
 VALUE_COLUMN = "length_nm"     # or "length_px" if not calibrated
 N_BINS = 20
@@ -407,10 +415,9 @@ STAT_SIZE  = 10
 
 BAR_COLOR  = "#2E86C1"
 FIG_W, FIG_H = 6.0, 4.3
-SAVE_AS = "tem_histogram.png"  # set to None to skip saving
-# =====================================================================
+SAVE_AS = "tem_histogram.png"  # set to None to skip, or a Drive path to keep it'''
 
-import numpy as np
+_TEM_PLOT = '''import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -435,14 +442,13 @@ fig.tight_layout()
 if SAVE_AS:
     fig.savefig(SAVE_AS, dpi=300, bbox_inches="tight")
 plt.show()
-print("n=%d  mean=%.3f  std=%.3f" % (len(vals), mean, std))
-'''
+print("n=%d  mean=%.3f  std=%.3f" % (len(vals), mean, std))'''
 
 
 # ----------------------------------------------------------------------
-# Builders
+# Config-cell builders
 # ----------------------------------------------------------------------
-def _build_xy_script(traces, style):
+def _xy_config(traces, style):
     lines = ["SPECTRA = ["]
     for tr in traces:
         lines.append(
@@ -450,31 +456,57 @@ def _build_xy_script(traces, style):
             % (tr["data_type"], tr["label"], tr.get("color"))
         )
     lines.append("]\n")
-    spectra_block = "\n".join(lines)
+    window = (
+        "\n# ----- UV-Vis normalization window (nm) -----\n"
+        f"UVVIS_MIN = {style.get('uvvis_min', 300.0)}\n"
+        f"UVVIS_MAX = {style.get('uvvis_max', 700.0)}\n\n"
+        'SAVE_AS = "plot.png"     # set to None to skip, or a Drive path to keep it'
+    )
+    return "\n".join(lines) + _style_config(style) + window
 
-    body = (_XY_BODY
-            .replace("__UVMIN__", repr(style.get("uvvis_min", 300.0)))
-            .replace("__UVMAX__", repr(style.get("uvvis_max", 700.0)))
-            .replace("__LOADER__", _LOADER))
-    return _XY_HEADER + spectra_block + _style_config(style) + body
 
-
-def _build_lifetime_script(trace, style):
+def _lifetime_config(trace, style):
     unit = trace.get("unit") or "ns"
     color = trace.get("color") or "#2E86C1"
-    body = (_LIFETIME_BODY
-            .replace("__DATACOLOR__", repr(color))
-            .replace("__UNIT__", repr(unit))
-            .replace("__LOADER__", _LOADER))
-    return _LIFETIME_HEADER + _style_config(style) + body
+    head = (
+        'DATA_PATH = "INSERT DATA PATH HERE"\n'
+        "FORCE_COMPONENTS = None      # None = auto-pick 2 vs 3; or set 2 or 3\n"
+        f"DATA_COLOR = {color!r}\n"
+        f"UNIT = {unit!r}\n\n"
+    )
+    tail = '\n\nSAVE_AS = "lifetime.png"     # set to None to skip, or a Drive path to keep it'
+    return head + _style_config(style) + tail
 
 
-def make_session_colab(sess):
-    """Return a Colab-ready script reproducing the current session's plot."""
+# ----------------------------------------------------------------------
+# Public builders — return .ipynb notebook JSON
+# ----------------------------------------------------------------------
+def make_session_notebook(sess):
+    """Return a Colab notebook (.ipynb JSON) reproducing the current plot."""
     if sess["mode"] == "lifetime":
-        return _build_lifetime_script(sess["traces"][0], sess["style"])
-    return _build_xy_script(sess["traces"], sess["style"])
+        cells = [
+            ("markdown", _LIFETIME_INTRO),
+            ("code", _DRIVE_CELL),
+            ("code", _lifetime_config(sess["traces"][0], sess["style"])),
+            ("code", _LOADER),
+            ("code", _LIFETIME_PLOT),
+        ]
+    else:
+        cells = [
+            ("markdown", _XY_INTRO),
+            ("code", _DRIVE_CELL),
+            ("code", _xy_config(sess["traces"], sess["style"])),
+            ("code", _LOADER),
+            ("code", _XY_PLOT),
+        ]
+    return _notebook(cells)
 
 
-def make_tem_colab_script():
-    return _TEM_TEMPLATE
+def make_tem_notebook():
+    """Return a Colab notebook (.ipynb JSON) for the TEM size histogram."""
+    return _notebook([
+        ("markdown", _TEM_INTRO),
+        ("code", _DRIVE_CELL),
+        ("code", _TEM_CONFIG),
+        ("code", _TEM_PLOT),
+    ])

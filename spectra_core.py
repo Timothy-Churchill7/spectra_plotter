@@ -229,8 +229,11 @@ def select_signal_column(df: pd.DataFrame, baseline_idx=None) -> int:
 
 
 def extract_xy(df: pd.DataFrame, data_type: str):
-    """Return (x, y, note) for a single file. For uvvis, subtracts a baseline
-    column if one is present."""
+    """Return (x, y, note) for a single file.
+
+    A column named "baseline"/"blank" means the signal has ALREADY been
+    baseline-subtracted, so it is only skipped (never re-subtracted) when
+    choosing the signal column."""
     if df.shape[1] < 2:
         raise ValueError("Expected at least 2 numeric columns.")
     baseline_idx = find_baseline_column(df)
@@ -241,11 +244,7 @@ def extract_xy(df: pd.DataFrame, data_type: str):
     order = np.argsort(x)
     x, y = x[order], y[order]
 
-    note = None
-    if data_type == "uvvis" and baseline_idx is not None:
-        baseline = df.iloc[:, baseline_idx].to_numpy(dtype=float)[order]
-        y = y - baseline
-        note = "baseline-subtracted"
+    note = "already baseline-subtracted" if baseline_idx is not None else None
     return x, y, note
 
 

@@ -29,7 +29,7 @@ from werkzeug.utils import secure_filename
 
 from spectra_core import (load_trace, render_session, DEFAULT_STYLE, LABELS,
                           FONT_FAMILIES, KIND_LABEL, TRACE_COLORS)
-from colab import make_session_colab
+from colab import make_session_notebook
 from tem_bp import tem_bp
 
 BASE_DIR = Path(__file__).parent
@@ -59,7 +59,7 @@ app.register_blueprint(tem_bp)
 
 def _clean_old_outputs():
     cutoff = time.time() - OUTPUT_MAX_AGE_SECONDS
-    for pattern in ("*.png", "*.py"):
+    for pattern in ("*.png", "*.py", "*.ipynb"):
         for f in OUTPUT_DIR.glob(pattern):
             try:
                 if f.stat().st_mtime < cutoff:
@@ -113,8 +113,8 @@ def _render(sess):
     job = uuid.uuid4().hex
     sess["result"] = render_session(sess, str(OUTPUT_DIR / f"{job}.png"))
     sess["png"] = f"{job}.png"
-    (OUTPUT_DIR / f"{job}.py").write_text(make_session_colab(sess))
-    sess["script"] = f"{job}.py"
+    (OUTPUT_DIR / f"{job}.ipynb").write_text(make_session_notebook(sess))
+    sess["script"] = f"{job}.ipynb"
 
 
 def _clamp_num(raw, lo, hi, fallback, cast=float):
@@ -304,17 +304,17 @@ def spectra_remove():
     return redirect(url_for("spectra_view"))
 
 
-@app.route("/script/<job_id>.py")
+@app.route("/notebook/<job_id>.ipynb")
 def download_script(job_id):
     # job_id is hex from uuid4; guard against path traversal.
     if not job_id.isalnum():
         abort(404)
-    path = OUTPUT_DIR / f"{job_id}.py"
+    path = OUTPUT_DIR / f"{job_id}.ipynb"
     if not path.exists():
         abort(404)
-    return send_from_directory(OUTPUT_DIR, f"{job_id}.py", as_attachment=True,
-                               download_name="plot_colab.py",
-                               mimetype="text/x-python")
+    return send_from_directory(OUTPUT_DIR, f"{job_id}.ipynb", as_attachment=True,
+                               download_name="plot_colab.ipynb",
+                               mimetype="application/x-ipynb+json")
 
 
 if __name__ == "__main__":
